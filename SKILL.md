@@ -147,6 +147,22 @@ Then, **fill in the pending markers in `report.md` using the Edit tool**. Walk e
 
 The fully-filled `report.md` is what gets ingested at Step 4.5. Do not skip the fill — empty markers won't ingest cleanly.
 
+**Step 4.4 — Stage to the Obsidian vault and open in Obsidian (always).** After filling every marker, do this — Taoufik reads everything in Obsidian, not in Preview/VS Code/whatever the default `open` would pick:
+
+1. **Derive the slug now** (do not wait for Step 4.5). Take the video title from `report.md` frontmatter, slugify (lowercase, ASCII-only, hyphens, max 60 chars), append `-YYYY-MM-DD`. Example: `karpathy-claude-md-43k-installs-2026-05-24`.
+2. **Create the staging dir:** `mkdir -p "/Users/taoufik/Second brain/raw/watched/<slug>"`.
+3. **Copy `report.md` + every hero frame** (filenames in the report frontmatter under `hero_frames:`) into that dir. The report MUST live inside the vault for Obsidian to open it.
+4. **Open in Obsidian via URL scheme** (macOS):
+   ```bash
+   open "obsidian://open?vault=Second%20brain&file=raw/watched/<slug>/report.md"
+   ```
+   The vault name is `Second brain` (URL-encode the space as `%20`). The `file=` value is the path relative to the vault root, no leading slash, no `.md` extension is also valid but include it for safety. Don't ask permission — the user has already opted in by running /watch.
+5. **Echo the vault-relative path in chat** on its own line: `📄 Report (open in Obsidian): raw/watched/<slug>/report.md`. So if Obsidian was closed / the URL handler missed, Taoufik can still navigate to it manually inside the vault.
+
+Rationale: the report is the leverage point of /watch, and Taoufik's reading surface is Obsidian. Opening in Preview or VS Code defeats the purpose — he'd have to copy it into the vault himself. Staging at 4.4 also means Step 4.5's "Yes / Stage" branches are no-ops on the copy step (the file is already in the vault); they only differ in whether the Ingest op runs.
+
+**Cleanup implication for Step 4.5:** if the user picks "No, drop it" at 4.5, ALSO `rm -rf "/Users/taoufik/Second brain/raw/watched/<slug>"` since we pre-staged. Do NOT drop the vault copy if they picked Yes or Stage.
+
 **Step 4.5 — Offer ingest into the Second Brain.** Use `AskUserQuestion` once, with these options (do NOT skip this step unless the user explicitly said "don't ingest" before /watch ran):
 
 > **Question:** "Want to ingest this into your Second Brain?"
