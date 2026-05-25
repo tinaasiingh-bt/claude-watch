@@ -6,8 +6,8 @@ by this script. Narrative sections (TL;DR, entities, concepts, etc.) are
 emitted as `<!-- pending Claude fill: <hint> -->` markers so Claude (the
 orchestrator) knows exactly what to write before offering ingest.
 
-The schema is dictated by what the Second Brain Ingest op (see
-/Users/taoufik/Second brain/CLAUDE.md) needs to extract:
+The schema is dictated by what an Obsidian-style Ingest op (see
+`$VAULT_DIR/CLAUDE.md` if the user has one) needs to extract:
   - Entities (people, companies, tools) → wiki/entities/*
   - Concepts (frameworks, ideas) → wiki/concepts/*
   - Source page with TL;DR and citations → wiki/sources/*

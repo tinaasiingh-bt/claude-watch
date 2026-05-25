@@ -1,11 +1,11 @@
 ---
 name: watch
-description: Watch a video (URL or local path) like an editor. Extracts scene-change frames, pacing metrics (cuts/min, shot length), and a dense 0-10s hook microscope; pulls transcript from captions or Whisper. Produces an ingest-ready `report.md` and, after answering the user, offers to ingest the analysis into the Second Brain wiki at /Users/taoufik/Second brain/ — tied to *why* the user watched it.
+description: Watch a video (URL or local path) like an editor. Extracts scene-change frames, pacing metrics (cuts/min, shot length), and a dense 0-10s hook microscope; pulls transcript from captions or Whisper. Produces an ingest-ready `report.md` and, after answering the user, optionally auto-ingests the analysis into your Obsidian vault (configurable via `$WATCH_VAULT_DIR`) — tied to *why* the user watched it.
 argument-hint: "<video-url-or-path> [why you're watching it]"
 allowed-tools: Bash, Read, AskUserQuestion
-homepage: https://github.com/bradautomates/claude-video
-repository: https://github.com/bradautomates/claude-video
-author: bradautomates
+homepage: https://github.com/taoufik/claude-watch
+repository: https://github.com/taoufik/claude-watch
+author: taoufik
 license: MIT
 user-invocable: true
 ---
@@ -20,9 +20,32 @@ You don't have a video input; this skill gives you one. A Python script download
 - **Editorial pacing metrics** — cuts/min, mean shot length, motion (when available). Lets you reason about pacing the way an editor does.
 - **Hook microscope** — first 10s auto-runs at 2 fps + word-level Whisper. The single most leveraged 10 seconds of any video deserves dense treatment.
 - **Structured `report.md`** — every watch emits an ingest-shaped report at `<workdir>/report.md` with TL;DR, key moments, hook breakdown, editorial profile, quotable moments, entities, concepts, and transcript. Narrative sections are emitted as `<!-- pending Claude fill: ... -->` markers — you fill them in before offering ingest.
-- **Step 4.5 — Ingest gate** — after answering the user, you ask once: "Want to ingest this into your Second Brain?" If yes, you read `/Users/taoufik/Second brain/CLAUDE.md` and run that vault's Ingest op against the report.
+- **Step 4.5 — Ingest gate** — after answering the user, you ask once: "Want to ingest this into your Obsidian vault?" If yes, and a vault is detected, you read `$VAULT_DIR/CLAUDE.md` (if it exists) and run that vault's Ingest op against the report.
 
 None of the above add new dependencies — pure ffmpeg + stdlib + the existing Whisper backend.
+
+## Configuration — finding the user's Obsidian vault
+
+Steps 4.4 and 4.5 stage the report inside an Obsidian vault so the user can read it where they read everything else. Resolve the vault directory in this order — first hit wins, and the result is what `$VAULT_DIR` refers to everywhere below:
+
+1. **`$WATCH_VAULT_DIR` env var** — if set and the path exists, use it. This is the user-controlled override.
+2. **`~/Second brain/`** — if it exists as a directory.
+3. **`~/Documents/Obsidian/`** — if it exists as a directory.
+4. **`~/Obsidian/`** — if it exists as a directory.
+5. **None found** — skip Steps 4.4 and 4.5 entirely. Print one line in chat so the user knows what happened: `📄 Report (no vault detected): <workdir>/report.md`. Suggest they set `WATCH_VAULT_DIR` if they want auto-ingest.
+
+A quick way to resolve it in bash inside the skill:
+
+```bash
+VAULT_DIR="${WATCH_VAULT_DIR:-}"
+if [ -z "$VAULT_DIR" ] || [ ! -d "$VAULT_DIR" ]; then
+  for candidate in "$HOME/Second brain" "$HOME/Documents/Obsidian" "$HOME/Obsidian"; do
+    if [ -d "$candidate" ]; then VAULT_DIR="$candidate"; break; fi
+  done
+fi
+```
+
+The vault's URL-name (for the `obsidian://` URL scheme in Step 4.4) is the final path component — e.g. `$HOME/Second brain` → `Second brain`. URL-encode spaces as `%20`.
 
 ## Step 0 — Setup preflight (runs every `/watch` invocation, silent on success)
 
@@ -147,25 +170,28 @@ Then, **fill in the pending markers in `report.md` using the Edit tool**. Walk e
 
 The fully-filled `report.md` is what gets ingested at Step 4.5. Do not skip the fill — empty markers won't ingest cleanly.
 
-**Step 4.4 — Stage to the Obsidian vault and open in Obsidian (always).** After filling every marker, do this — Taoufik reads everything in Obsidian, not in Preview/VS Code/whatever the default `open` would pick:
+**Step 4.4 — Stage to the Obsidian vault and open in Obsidian (when a vault is detected).** After filling every marker, resolve `$VAULT_DIR` per the Configuration section. **If no vault is detected, skip this step** and emit `📄 Report (no vault detected): <workdir>/report.md` in chat instead.
+
+When `$VAULT_DIR` resolves:
 
 1. **Derive the slug now** (do not wait for Step 4.5). Take the video title from `report.md` frontmatter, slugify (lowercase, ASCII-only, hyphens, max 60 chars), append `-YYYY-MM-DD`. Example: `karpathy-claude-md-43k-installs-2026-05-24`.
-2. **Create the staging dir:** `mkdir -p "/Users/taoufik/Second brain/raw/watched/<slug>"`.
+2. **Create the staging dir:** `mkdir -p "$VAULT_DIR/raw/watched/<slug>"`.
 3. **Copy `report.md` + every hero frame** (filenames in the report frontmatter under `hero_frames:`) into that dir. The report MUST live inside the vault for Obsidian to open it.
-4. **Open in Obsidian via URL scheme** (macOS):
+4. **Open in Obsidian via URL scheme** (macOS). The vault URL-name is the final component of `$VAULT_DIR` with spaces URL-encoded as `%20`:
    ```bash
-   open "obsidian://open?vault=Second%20brain&file=raw/watched/<slug>/report.md"
+   VAULT_NAME=$(basename "$VAULT_DIR" | sed 's/ /%20/g')
+   open "obsidian://open?vault=${VAULT_NAME}&file=raw/watched/<slug>/report.md"
    ```
-   The vault name is `Second brain` (URL-encode the space as `%20`). The `file=` value is the path relative to the vault root, no leading slash, no `.md` extension is also valid but include it for safety. Don't ask permission — the user has already opted in by running /watch.
-5. **Echo the vault-relative path in chat** on its own line: `📄 Report (open in Obsidian): raw/watched/<slug>/report.md`. So if Obsidian was closed / the URL handler missed, Taoufik can still navigate to it manually inside the vault.
+   The `file=` value is the path relative to the vault root, no leading slash. Don't ask permission — the user has already opted in by running /watch.
+5. **Echo the vault-relative path in chat** on its own line: `📄 Report (open in Obsidian): raw/watched/<slug>/report.md`. So if Obsidian was closed / the URL handler missed, the user can still navigate to it manually inside the vault.
 
-Rationale: the report is the leverage point of /watch, and Taoufik's reading surface is Obsidian. Opening in Preview or VS Code defeats the purpose — he'd have to copy it into the vault himself. Staging at 4.4 also means Step 4.5's "Yes / Stage" branches are no-ops on the copy step (the file is already in the vault); they only differ in whether the Ingest op runs.
+Rationale: the report is the leverage point of /watch. If the user reads everything in Obsidian, opening in Preview or VS Code defeats the purpose. Staging at 4.4 also means Step 4.5's "Yes / Stage" branches are no-ops on the copy step (the file is already in the vault); they only differ in whether the Ingest op runs.
 
-**Cleanup implication for Step 4.5:** if the user picks "No, drop it" at 4.5, ALSO `rm -rf "/Users/taoufik/Second brain/raw/watched/<slug>"` since we pre-staged. Do NOT drop the vault copy if they picked Yes or Stage.
+**Cleanup implication for Step 4.5:** if the user picks "No, drop it" at 4.5 AND a vault was staged at 4.4, ALSO `rm -rf "$VAULT_DIR/raw/watched/<slug>"` since we pre-staged. Do NOT drop the vault copy if they picked Yes or Stage.
 
-**Step 4.5 — Offer ingest into the Second Brain.** Use `AskUserQuestion` once, with these options (do NOT skip this step unless the user explicitly said "don't ingest" before /watch ran):
+**Step 4.5 — Offer ingest into the Obsidian vault.** **Skip this step entirely if no vault was detected at Step 4.4.** Otherwise use `AskUserQuestion` once, with these options (do NOT skip if a vault was found unless the user explicitly said "don't ingest" before /watch ran):
 
-> **Question:** "Want to ingest this into your Second Brain?"
+> **Question:** "Want to ingest this into your Obsidian vault?"
 > - **Yes — same angle** ("<intent>")
 > - **Yes — different angle** (user specifies in the notes field)
 > - **Stage to `raw/watched/` for later**
@@ -175,20 +201,19 @@ Routing based on response:
 
 **A. Yes (same or different angle):**
 1. Derive the slug: take the video title from `report.md` frontmatter, slugify (lowercase, ASCII-only, hyphens, max 60 chars), append `-YYYY-MM-DD`. Example: `me-at-the-zoo-2026-05-24`.
-2. Create `/Users/taoufik/Second brain/raw/watched/<slug>/`.
-3. Copy `report.md` and every hero frame (filenames listed in the report's frontmatter under `hero_frames:`) to that directory.
+2. Confirm the staging dir exists at `$VAULT_DIR/raw/watched/<slug>/` (Step 4.4 already created it).
+3. The report + hero frames are already copied there from Step 4.4.
 4. **If "different angle":** Re-edit the TL;DR + Entities + Concepts sections of the copied report to reflect the new angle the user specified, before running ingest.
-5. **Read `/Users/taoufik/Second brain/CLAUDE.md`** to refresh the Ingest op definition — that file is authoritative; this skill must not duplicate its steps.
-6. Execute the Ingest op against `raw/watched/<slug>/report.md` exactly as `/Users/taoufik/Second brain/CLAUDE.md` defines it (read source → summarize → identify entities + concepts → update/create wiki pages → create sources page → contradiction check → update index → link-integrity check → log entry).
-7. Report back to the user in chat: which entity pages were touched, which concept pages were created, any contradictions flagged, the path to the new `wiki/sources/<slug>.md`, and the `log.md` entry written.
+5. **If `$VAULT_DIR/CLAUDE.md` exists:** Read it to refresh the Ingest op definition — that file is authoritative; this skill must not duplicate its steps. Execute the Ingest op against `raw/watched/<slug>/report.md` exactly as `$VAULT_DIR/CLAUDE.md` defines it.
+6. **If no `$VAULT_DIR/CLAUDE.md` exists:** Run a generic ingest — read the report, identify entities + concepts, append a one-line entry to `$VAULT_DIR/log.md` (create if missing), and tell the user the report is staged at `raw/watched/<slug>/report.md` and they can wire up an Ingest op of their own.
+7. Report back to the user in chat: which entity pages were touched (if any), the path to the staged report, and the `log.md` entry written.
 
 **B. Stage to `raw/watched/` for later:**
-1. Same slug derivation (step 1 above).
-2. Copy `report.md` + hero frames into `/Users/taoufik/Second brain/raw/watched/<slug>/`.
-3. Do NOT touch the wiki. Do NOT append to `log.md`.
-4. Tell the user in chat: "Staged at `Second brain/raw/watched/<slug>/`. Run the Ingest op from inside Second Brain when you're ready."
+1. The staging from Step 4.4 already did the file copy.
+2. Do NOT touch the wiki. Do NOT append to `log.md`.
+3. Tell the user in chat: "Staged at `$(basename $VAULT_DIR)/raw/watched/<slug>/`. Run an Ingest op against it when you're ready."
 
-**C. No, drop it:** proceed to Step 5 (cleanup).
+**C. No, drop it:** proceed to Step 5 (cleanup) — and per the cleanup-implication note in Step 4.4, `rm -rf "$VAULT_DIR/raw/watched/<slug>"` to undo the pre-staging.
 
 The "different angle" path is what makes /watch truly plug-and-play — the user can watch a video for one reason, then on the way out decide it's actually more useful for a different concept, and the resulting wiki entry reframes accordingly.
 
@@ -233,9 +258,9 @@ If you already watched a video this session and the user asks a follow-up, do **
 - Sends the extracted audio clip to OpenAI's audio transcription API (`api.openai.com/v1/audio/transcriptions`) when `OPENAI_API_KEY` is set and Groq is not, or when `--whisper openai` is forced
 - Writes the downloaded video, frames, audio, and an intermediate transcript to a working directory under the system temp dir (or `--out-dir` if specified) so Claude can `Read` them
 - Reads / creates `~/.config/watch/.env` (mode `0600`) to store the Whisper API key(s) and a `SETUP_COMPLETE` marker. As a fallback, also reads `.env` in the current working directory
-- Reads `/Users/taoufik/Second brain/CLAUDE.md` at orchestration time (only when ingest is requested) to follow that vault's Ingest operation definition
-- Writes a structured `report.md` plus copies of hero frames into `/Users/taoufik/Second brain/raw/watched/<slug>/` when the user consents to ingest or stage
-- When ingest is consented to: reads and writes pages under `/Users/taoufik/Second brain/wiki/` (entities, concepts, sources, index.md) and appends to `/Users/taoufik/Second brain/log.md` — exactly the actions defined by that vault's Ingest op
+- Reads `$VAULT_DIR/CLAUDE.md` at orchestration time (only when ingest is requested and the file exists) to follow that vault's Ingest operation definition
+- Writes a structured `report.md` plus copies of hero frames into `$VAULT_DIR/raw/watched/<slug>/` when a vault is detected at Step 4.4
+- When ingest is consented to: reads and writes pages under `$VAULT_DIR/wiki/` (entities, concepts, sources, index.md) and appends to `$VAULT_DIR/log.md` — following the actions defined by the vault's Ingest op (or a generic fallback if no `CLAUDE.md` is present)
 
 **What this skill does NOT do:**
 - Does not upload the video itself to any API — only the extracted audio goes out, and only when native captions are missing AND Whisper is not disabled with `--no-whisper`

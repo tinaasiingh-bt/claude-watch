@@ -2,20 +2,31 @@
 
 **Give Claude the ability to watch any video.**
 
+> Fork of [bradautomates/claude-video](https://github.com/bradautomates/claude-video). Adds **scene-change frame extraction** (one frame per cut instead of every-N-seconds), a **0-10s hook microscope** (dense frames + word-level Whisper on the opening, where every video earns or loses your attention), and **optional Obsidian auto-save** so a watched video becomes a connected wiki entry without copy-paste.
+
 Claude Code:
 ```
-/plugin marketplace add bradautomates/claude-video
-/plugin install watch@claude-video
+/plugin marketplace add taoufik/claude-watch
+/plugin install watch@claude-watch
 ```
 
-claude.ai (web): [download `watch.skill`](https://github.com/bradautomates/claude-video/releases/latest) and drop it into Settings → Capabilities → Skills.
+claude.ai (web): [download `watch.skill`](https://github.com/taoufik/claude-watch/releases/latest) and drop it into Settings → Capabilities → Skills.
 
 Codex / generic skills:
 ```bash
-git clone https://github.com/bradautomates/claude-video.git ~/.codex/skills/watch
+git clone https://github.com/taoufik/claude-watch.git ~/.codex/skills/watch
 ```
 
-Zero config to start — `yt-dlp` and `ffmpeg` install on first run via `brew` on macOS (Linux/Windows print exact commands). Captions cover most public videos for free. Whisper API key is only needed when a video has no captions.
+Zero config to start — `yt-dlp` and `ffmpeg` install on first run via `brew` on macOS (Linux/Windows print exact commands). Captions cover most public videos for free. Whisper API key is only needed when a video has no captions. Set `$WATCH_VAULT_DIR` to point at your Obsidian vault for auto-save, or leave it unset and the skill skips the ingest step quietly.
+
+## What this fork adds over upstream
+
+- **Scene-change frame extraction** — `scripts/frames.py` grabs one frame per detected shot via ffmpeg's `select=gt(scene,...)`, not a uniform tick every N seconds. Token cost stays flat on long videos because the frame count is bounded by the number of cuts, not the duration.
+- **0-10s hook microscope** — `scripts/hook.py` runs a denser 2 fps pass on the opening 10 seconds plus a word-level Whisper transcript, so the report tells you what was on screen *as each word landed*. The first 10 seconds is where every video either earns your attention or loses it.
+- **Structured `report.md` with Claude-fill markers** — `scripts/report.py` emits a fixed-schema report (TL;DR, key moments, hook breakdown, editorial profile, quotable moments, entities, concepts, transcript) where narrative sections are explicit `<!-- pending Claude fill: ... -->` markers. Claude has a job-list to walk before ingest, not a blank doc.
+- **Optional Obsidian auto-save** — Step 4.4 stages the report into `$VAULT_DIR/raw/watched/<slug>/` and opens it via the `obsidian://` URL scheme. Step 4.5 offers ingest into the vault's wiki. Both steps skip cleanly when no vault is detected. Vault path is resolved from `$WATCH_VAULT_DIR` or auto-detected from `~/Second brain/`, `~/Documents/Obsidian/`, `~/Obsidian/`.
+
+Everything else — yt-dlp download, ffmpeg pipeline, Groq/OpenAI Whisper backends, the `--start`/`--end` focused mode, the SessionStart hook, the multi-surface install — comes from upstream and works unchanged.
 
 ---
 
@@ -71,23 +82,24 @@ When the user names a moment ("around 2:30", "the last 30 seconds", "from 0:45 t
 
 | Surface | Install |
 |---------|---------|
-| **Claude Code** | `/plugin marketplace add bradautomates/claude-video` then `/plugin install watch@claude-video` |
-| **claude.ai** (web) | [Download `watch.skill`](https://github.com/bradautomates/claude-video/releases/latest) → Settings → Capabilities → Skills → `+` |
-| **Codex** | `git clone https://github.com/bradautomates/claude-video.git ~/.codex/skills/watch` |
-| **Manual / dev** | `git clone https://github.com/bradautomates/claude-video.git ~/.claude/skills/watch` |
+| **Claude Code** | `/plugin marketplace add taoufik/claude-watch` then `/plugin install watch@claude-watch` |
+| **claude.ai** (web) | [Download `watch.skill`](https://github.com/taoufik/claude-watch/releases/latest) → Settings → Capabilities → Skills → `+` |
+| **Codex** | `git clone https://github.com/taoufik/claude-watch.git ~/.codex/skills/watch` |
+| **Manual / dev** | `git clone https://github.com/taoufik/claude-watch.git ~/.claude/skills/watch` |
+| **Configuration** | Optional: `export WATCH_VAULT_DIR=/path/to/your/obsidian/vault` to enable auto-save. Auto-detects `~/Second brain/`, `~/Documents/Obsidian/`, `~/Obsidian/`. |
 
 ### Claude Code
 
 ```
-/plugin marketplace add bradautomates/claude-video
-/plugin install watch@claude-video
+/plugin marketplace add taoufik/claude-watch
+/plugin install watch@claude-watch
 ```
 
-Update later with `/plugin update watch@claude-video`.
+Update later with `/plugin update watch@claude-watch`.
 
 ### claude.ai (web)
 
-1. [Download `watch.skill`](https://github.com/bradautomates/claude-video/releases/latest) from the latest release.
+1. [Download `watch.skill`](https://github.com/taoufik/claude-watch/releases/latest) from the latest release.
 2. Go to Settings → Capabilities → Skills.
 3. Click `+` and drop the file in.
 
@@ -96,13 +108,13 @@ Enable "Code execution and file creation" under Capabilities first — the skill
 ### Codex
 
 ```bash
-git clone https://github.com/bradautomates/claude-video.git ~/.codex/skills/watch
+git clone https://github.com/taoufik/claude-watch.git ~/.codex/skills/watch
 ```
 
 ### Manual (developer)
 
 ```bash
-git clone https://github.com/bradautomates/claude-video.git ~/.claude/skills/watch
+git clone https://github.com/taoufik/claude-watch.git ~/.claude/skills/watch
 ```
 
 ## First run
@@ -197,4 +209,4 @@ Built on `yt-dlp`, `ffmpeg`, and Claude's multimodal `Read` tool. Whisper transc
 
 ---
 
-[github.com/bradautomates/claude-video](https://github.com/bradautomates/claude-video) · [LICENSE](LICENSE)
+[github.com/taoufik/claude-watch](https://github.com/taoufik/claude-watch) (fork of [bradautomates/claude-video](https://github.com/bradautomates/claude-video)) · [LICENSE](LICENSE)

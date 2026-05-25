@@ -2,6 +2,24 @@
 
 All notable changes to `/watch` are documented here.
 
+## [0.2.0] — 2026-05-25 (fork by taoufik)
+
+Fork of [bradautomates/claude-video](https://github.com/bradautomates/claude-video) v0.1.3. Upstream pipeline (yt-dlp + ffmpeg + Whisper) preserved; everything below is additive.
+
+### Added
+- Scene-change frame extraction in `scripts/frames.py` — `extract_scene_change()` + `select_hero_frames()` using ffmpeg's `select=gt(scene,...)` filter. One frame per detected shot instead of uniform every-N-seconds sampling. Keeps token cost flat on long videos. Uniform sampling still available as a fallback for static/screen-recorded sources.
+- 0-10s hook microscope in `scripts/hook.py` — 2 fps frames + word-level Whisper transcript on the opening 10 seconds, so the report can tell you what's on screen *as each word lands*.
+- Editorial pacing metrics in `scripts/pacing.py` — shot count, cuts/min, mean + median shot length.
+- Structured `report.md` emitter in `scripts/report.py` — fixed-schema ingest-ready report with `<!-- pending Claude fill: ... -->` markers for narrative sections (TL;DR, key moments, hook breakdown, editorial profile, quotable moments, entities, concepts).
+- Word-level timestamps in `scripts/whisper.py` (Groq + OpenAI backends extended).
+- New CLI flags in `scripts/watch.py`: `--intent`, `--no-scene-change`, `--no-hook-microscope`.
+- Step 4.4 (stage to Obsidian vault) + Step 4.5 (ingest gate) in `SKILL.md` — optional auto-save to your Obsidian vault. Path resolved via `$WATCH_VAULT_DIR` or auto-detected from `~/Second brain/`, `~/Documents/Obsidian/`, `~/Obsidian/`. Skips cleanly when no vault is detected.
+- 7 unit tests under `scripts/tests/` (stdlib `unittest`, no pytest dependency).
+
+### Changed
+- `SKILL.md` is now a v2 contract — describes the structured report, the marker-fill step, and the vault config. Backwards-compatible with /watch invocations that don't care about ingest.
+- README documents what this fork adds over upstream and the `$WATCH_VAULT_DIR` configuration.
+
 ## [0.1.3] — 2026-05-09
 
 ### Fixed
