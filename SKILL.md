@@ -29,17 +29,18 @@ None of the above add new dependencies — pure ffmpeg + stdlib + the existing W
 Steps 4.4 and 4.5 stage the report inside an Obsidian vault so the user can read it where they read everything else. Resolve the vault directory in this order — first hit wins, and the result is what `$VAULT_DIR` refers to everywhere below:
 
 1. **`$WATCH_VAULT_DIR` env var** — if set and the path exists, use it. This is the user-controlled override.
-2. **`~/Second brain/`** — if it exists as a directory.
-3. **`~/Documents/Obsidian/`** — if it exists as a directory.
-4. **`~/Obsidian/`** — if it exists as a directory.
-5. **None found** — skip Steps 4.4 and 4.5 entirely. Print one line in chat so the user knows what happened: `📄 Report (no vault detected): <workdir>/report.md`. Suggest they set `WATCH_VAULT_DIR` if they want auto-ingest.
+2. **`~/tina-brain/brain/`** — if it exists as a directory.
+3. **`~/Second brain/`** — if it exists as a directory.
+4. **`~/Documents/Obsidian/`** — if it exists as a directory.
+5. **`~/Obsidian/`** — if it exists as a directory.
+6. **None found** — skip Steps 4.4 and 4.5 entirely. Print one line in chat so the user knows what happened: `📄 Report (no vault detected): <workdir>/report.md`. Suggest they set `WATCH_VAULT_DIR` if they want auto-ingest.
 
 A quick way to resolve it in bash inside the skill:
 
 ```bash
 VAULT_DIR="${WATCH_VAULT_DIR:-}"
 if [ -z "$VAULT_DIR" ] || [ ! -d "$VAULT_DIR" ]; then
-  for candidate in "$HOME/Second brain" "$HOME/Documents/Obsidian" "$HOME/Obsidian"; do
+  for candidate in "$HOME/tina-brain/brain" "$HOME/Second brain" "$HOME/Documents/Obsidian" "$HOME/Obsidian"; do
     if [ -d "$candidate" ]; then VAULT_DIR="$candidate"; break; fi
   done
 fi
